@@ -20,14 +20,23 @@ python -m pip install pyscreeze
 - **No Python available**: use the platform fallback instead of the capture step below:
   - macOS: `screencapture -x /tmp/screen.png`
   - Windows: `python` fallback not possible → use PowerShell: `Add-Type -AssemblyName System.Drawing; $s=[System.Windows.Forms.Screen]::PrimaryScreen.Bounds; $b=New-Object System.Drawing.Bitmap $s.Width,$s.Height; (New-Object System.Drawing.Graphics $b).CopyFromScreen($s.Location,[System.Drawing.Point]::Empty,$b.Size); $b.Save('<path>\screen.png')`
+  - **Linux (Wayland)**: `grim <path>/screen.png` (grim is the standard Wayland screenshot tool; install with `sudo apt install grim` or `sudo pacman -S grim` if missing)
+  - **Linux (X11)**: `import -window root <path>/screen.png` (ImageMagick; install with `sudo apt install imagemagick` if missing)
 
 ## Workflow
 
 1. If the relevant window isn't in front and a window switcher is available (e.g. `windows-mcp` `Switch-Tool`), bring it to the front. Otherwise ask the user to bring it up.
-2. Capture the full screen to a **unique** file per capture (`screen1.png`, `screen2.png`, … — never reuse a name, or you'll read a stale image):
-   ```
-   python -c "import pyscreeze; pyscreeze.screenshot().save('<tempdir>/screenN.png')"
-   ```
+2. Capture the full screen to a **unique** file per capture (`screen1.png`, `screen2.png`, … — never reuse a name, or you'll read a stale image). Pick the capture method by platform:
+   - **Windows / macOS / Linux-X11 (pyscreeze path)**:
+     ```
+     python -c "import pyscreeze; pyscreeze.screenshot().save('<tempdir>/screenN.png')"
+     ```
+   - **Linux (Wayland)** — pyscreeze does NOT work on Wayland; use `grim` directly:
+     ```
+     grim <tempdir>/screenN.png
+     ```
+     (grim auto-detects the Wayland display; no env vars needed if run from a Wayland session)
+   - **Linux (X11)** — if `import` is unavailable, fall back to pyscreeze.
 3. Read the image with the `read` tool (multimodal).
 4. Solve. Show the key steps (a short table or 3–5 line calculation) so the user can verify, then state the final answer plainly.
 5. If the user asks to fill in a form: fill only the fields asked for, verify with a follow-up screenshot, and stop before any submit button.
@@ -35,7 +44,8 @@ python -m pip install pyscreeze
 
 ## Pitfalls (learned the hard way)
 
-- **MCP screenshot tools may return null/empty** when called through a code-execution layer (the image content doesn't round-trip). If a screenshot tool returns nothing, fall back to the pyscreeze file + `read` flow above.
+- **MCP screenshot tools may return null/empty** when called through a code-execution layer (the image content doesn't round-trip). If a screenshot tool returns nothing, fall back to the platform capture file + `read` flow above.
+- **pyscreeze does NOT work on Linux Wayland**: it requires `gnome-screenshot` (X11 only) and raises an exception on Wayland sessions. On Wayland, always use `grim` directly. To detect: if `$WAYLAND_DISPLAY` is set (or `echo $XDG_SESSION_TYPE` returns `wayland`), use `grim`. If `$DISPLAY` is set and `$XDG_SESSION_TYPE` is `x11`, pyscreeze works.
 - **Resolution scaling**: the image you read is often downscaled from the native screen (e.g. 2560×1440 shown as 1920×1080). Never trust eyeballed pixel coordinates. If coordinates are needed, detect them programmatically (e.g. PIL scan for input-box borders) and scale to the native resolution reported by the screenshot file's size.
 - **Browser content is invisible to UIA**: element-finder/text tools (UIA-based) cannot see the DOM of Chrome/Brave/Firefox. For browser forms, coordinate-based click+type is the only path.
 - **Native `<select>` dropdowns are flaky** with synthetic input: a click may not open the list, and the list often closes before a follow-up screenshot. Try click → `down` → `enter`. If it still fails after 2–3 attempts, stop, skip the dropdown, and hand it to the user — don't burn turns.
